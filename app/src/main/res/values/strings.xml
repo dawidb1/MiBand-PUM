@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MiBand2</string>
+    <string name="physical_adress">F9:99:89:14:FF:F8</string>
+    <!--<string name="physical_address">F9:99:89:14:FF:F8</string>-->
+</resources>
