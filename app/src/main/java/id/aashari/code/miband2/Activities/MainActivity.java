@@ -23,6 +23,7 @@ import android.widget.Toast;
 
 import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collector;
 
 import id.aashari.code.miband2.Helpers.CustomBluetoothProfile;
 import id.aashari.code.miband2.R;
@@ -160,6 +161,13 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Failed get battery info", Toast.LENGTH_SHORT).show();
         }
 
+    }
+
+    void getSleepdata(){
+
+        BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.Basic.service)
+                .getCharacteristic(CustomBluetoothProfile.Basic.UUID_CHARACTERISTIC_CONTROL);
+        bchar.setValue(new byte[] {CustomBluetoothProfile.Basic.CMD_GET_SLEEP});
     }
 
     void startVibrate() {
