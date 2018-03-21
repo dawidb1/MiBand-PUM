@@ -23,6 +23,7 @@ import android.widget.Toast;
 
 import java.util.Arrays;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collector;
 
 import id.aashari.code.miband2.Helpers.CustomBluetoothProfile;
@@ -37,7 +38,7 @@ public class MainActivity extends Activity {
     BluetoothGatt bluetoothGatt;
     BluetoothDevice bluetoothDevice;
 
-    Button btnStartConnecting, btnGetBatteryInfo, btnGetHeartRate, btnWalkingInfo, btnStartVibrate, btnStopVibrate;
+    Button btnStartConnecting, btnGetBatteryInfo, btnGetHeartRate, btnWalkingInfo, btnStartVibrate, btnStopVibrate, btnTest;
     EditText txtPhysicalAddress;
     TextView txtState, txtByte;
 
@@ -78,6 +79,8 @@ public class MainActivity extends Activity {
         txtPhysicalAddress = (EditText) findViewById(R.id.txtPhysicalAddress);
         txtState = (TextView) findViewById(R.id.txtState);
         txtByte = (TextView) findViewById(R.id.txtByte);
+
+        btnTest = (Button) findViewById(R.id.btnTest);
     }
 
     void initializeEvents() {
@@ -109,6 +112,13 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 startScanHeartRate();
+            }
+        });
+
+        btnTest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                getTest();
             }
         });
     }
@@ -163,11 +173,14 @@ public class MainActivity extends Activity {
 
     }
 
-    void getSleepdata(){
-
+//    BUTTON TESTOWY
+    void getTest(){
         BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.Basic.service)
-                .getCharacteristic(CustomBluetoothProfile.Basic.UUID_CHARACTERISTIC_CONTROL);
-        bchar.setValue(new byte[] {CustomBluetoothProfile.Basic.CMD_GET_SLEEP});
+                .getCharacteristic(CustomBluetoothProfile.Basic.batteryCharacteristic);
+        bluetoothGatt.readCharacteristic(bchar);
+//        if (!bluetoothGatt.readCharacteristic(bchar)) {
+//            Toast.makeText(this, "Failed get battery info", Toast.LENGTH_SHORT).show();
+//        }
     }
 
     void startVibrate() {
