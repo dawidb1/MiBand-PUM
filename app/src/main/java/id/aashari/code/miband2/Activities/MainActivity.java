@@ -8,26 +8,23 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothProfile;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collector;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
-import id.aashari.code.miband2.Helpers.CustomBluetoothProfile;
+import id.aashari.code.miband2.BasicProject.CustomBluetoothProfile;
 import id.aashari.code.miband2.R;
+import id.aashari.code.miband2.BLE_Service.BluetoothService;
 
 public class MainActivity extends Activity {
 
@@ -40,7 +37,7 @@ public class MainActivity extends Activity {
 
     Button btnStartConnecting, btnGetBatteryInfo, btnGetHeartRate, btnWalkingInfo, btnStartVibrate, btnStopVibrate, btnTest;
     EditText txtPhysicalAddress;
-    TextView txtState, txtByte;
+    TextView txtState, txtByte, txtDevicesFound;
 
 
     @Override
@@ -56,13 +53,20 @@ public class MainActivity extends Activity {
 
     }
 
+    // wyświetla powiązane przez bluettoth urządzenia
     void getBoundedDevice() {
         Set<BluetoothDevice> boundedDevice = bluetoothAdapter.getBondedDevices();
+        String showText = "";
+        String devicesAddress = "";
+
         for (BluetoothDevice bd : boundedDevice) {
-            if (bd.getName().contains("MI Band 2")) {
-                txtPhysicalAddress.setText(bd.getAddress());
-            }
+            showText += bd.getName() + "   " + bd.getAddress() + "\n";
+//            if (bd.getName().contains("MI Band 2")) {
+//                txtPhysicalAddress.setText(bd.getAddress());
+//            }
         }
+        showText += "Jeśli twojego urządzenia nie ma na liście, sparuj przez bluetooth!";
+        txtDevicesFound.setText(showText);
     }
 
     void initializeObjects() {
@@ -79,10 +83,12 @@ public class MainActivity extends Activity {
         txtPhysicalAddress = (EditText) findViewById(R.id.txtPhysicalAddress);
         txtState = (TextView) findViewById(R.id.txtState);
         txtByte = (TextView) findViewById(R.id.txtByte);
+        txtDevicesFound = (TextView) findViewById(R.id.tv_devices_found);
 
         btnTest = (Button) findViewById(R.id.btnTest);
     }
 
+    // podłączenie akcji na buttonnach
     void initializeEvents() {
         btnStartConnecting.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -132,7 +138,6 @@ public class MainActivity extends Activity {
         Log.v("test", "Device name " + bluetoothDevice.getName());
 
         bluetoothGatt = bluetoothDevice.connectGatt(this, true, bluetoothGattCallback);
-
     }
 
     void stateConnected() {
@@ -167,21 +172,119 @@ public class MainActivity extends Activity {
         txtByte.setText("...");
         BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.Basic.service)
                 .getCharacteristic(CustomBluetoothProfile.Basic.batteryCharacteristic);
+
+//        bluetoothGatt.readCharacteristic(bchar);
         if (!bluetoothGatt.readCharacteristic(bchar)) {
             Toast.makeText(this, "Failed get battery info", Toast.LENGTH_SHORT).show();
         }
-
     }
 
-//    BUTTON TESTOWY
+    public static final byte COMMAND_ACTIVITY_DATA_START_DATE = 0x01;
+    public static final byte COMMAND_ACTIVITY_DATA_TYPE_ACTIVTY = 0x01;
+
+    //    BUTTON TESTOWY
+    //todo button testowy
     void getTest(){
-        BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.Basic.service)
-                .getCharacteristic(CustomBluetoothProfile.Basic.batteryCharacteristic);
-        bluetoothGatt.readCharacteristic(bchar);
+        txtByte.setText("...testowanie...");
+//        BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.Basic.service)
+//                .getCharacteristic(BluetoothService.MiBandService.UUID_CHARACTERISTIC_5_ACTIVITY_DATA);
+        BluetoothGattCharacteristic bchar = bluetoothGatt.getService(BluetoothService.MiBandService.UUID_SERVICE_MIBAND_SERVICE)
+                .getCharacteristic(BluetoothService.MiBandService.UUID_CHARACTERISTIC_5_ACTIVITY_DATA);
+
+        Calendar today = Calendar.getInstance();
+        Calendar yesterday = (Calendar)today.clone();
+        yesterday.add(Calendar.HOUR,-2);
+        String displayYesterday = yesterday.getTime().toString();
+
+        bluetoothGatt.setCharacteristicNotification(bchar, true);
+        bchar.setValue(join(
+                new byte[]{COMMAND_ACTIVITY_DATA_START_DATE,COMMAND_ACTIVITY_DATA_TYPE_ACTIVTY}
+                ,getTimeBytes((yesterday),TimeUnit.MINUTES)
+        ));
+        bluetoothGatt.writeCharacteristic(bchar);
+
+//        bluetoothGatt.readCharacteristic(bchar);
+//        BluetoothGattDescriptor descriptor = bchar.getDescriptor(CustomBluetoothProfile.HeartRate.descriptor);
+//        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+//        bluetoothGatt.writeDescriptor(descriptor);
 //        if (!bluetoothGatt.readCharacteristic(bchar)) {
 //            Toast.makeText(this, "Failed get battery info", Toast.LENGTH_SHORT).show();
 //        }
     }
+    //region metody do buttona testowego
+    public byte[] getTimeBytes(Calendar calendar, TimeUnit precision) {
+        byte[] bytes;
+        if (precision == TimeUnit.MINUTES) {
+            bytes = shortCalendarToRawBytes(calendar, true);
+//        } else if (precision == TimeUnit.SECONDS) {
+//            bytes = BLETypeConversions.calendarToRawBytes(calendar, true);
+        } else {
+            throw new IllegalArgumentException("Unsupported precision, only MINUTES and SECONDS are supported till now");
+        }
+        byte[] tail = new byte[] { 0, mapTimeZone(calendar.getTimeZone()) }; // 0 = adjust reason bitflags? or DST offset?? , timezone
+//        byte[] tail = new byte[] { 0x2 }; // reason
+        byte[] all = join(bytes, tail);
+        return all;
+    }
+    public static byte[] join(byte[] start, byte[] end) {
+        if (start == null || start.length == 0) {
+            return end;
+        }
+        if (end == null || end.length == 0) {
+            return start;
+        }
+
+        byte[] result = new byte[start.length + end.length];
+        System.arraycopy(start, 0, result, 0, start.length);
+        System.arraycopy(end, 0, result, start.length, end.length);
+        return result;
+    }
+
+
+    public static byte[] shortCalendarToRawBytes(Calendar timestamp, boolean honorDeviceTimeOffset) {
+
+        // The mi-band device currently records sleep
+        // only if it happens after 10pm and before 7am.
+        // The offset is used to trick the device to record sleep
+        // in non-standard hours.
+        // If you usually sleep, say, from 6am to 2pm, set the
+        // shift to -8, so at 6am the device thinks it's still 10pm
+        // of the day before.
+
+//        if (honorDeviceTimeOffset) {
+//            int offsetInHours = MiBandCoordinator.getDeviceTimeOffsetHours();
+//            if (offsetInHours != 0) {
+//                timestamp.add(Calendar.HOUR_OF_DAY, offsetInHours);
+//            }
+//        }
+
+        // MiBand2:
+        // year,year,month,dayofmonth,hour,minute
+
+        byte[] year = fromUint16(timestamp.get(Calendar.YEAR));
+        return new byte[] {
+                year[0],
+                year[1],
+                fromUint8(timestamp.get(Calendar.MONTH) + 1),
+                fromUint8(timestamp.get(Calendar.DATE)),
+                fromUint8(timestamp.get(Calendar.HOUR_OF_DAY)),
+                fromUint8(timestamp.get(Calendar.MINUTE))
+        };
+    }
+    public static byte[] fromUint16(int value) {
+        return new byte[] {
+                (byte) (value & 0xff),
+                (byte) ((value >> 8) & 0xff),
+        };
+    }
+    public static byte fromUint8(int value) {
+        return (byte) (value & 0xff);
+    }
+    public static byte mapTimeZone(TimeZone timeZone) {
+        int utcOffsetInHours =  (timeZone.getRawOffset() / (1000 * 60 * 60));
+        return (byte) (utcOffsetInHours * 4);
+    }
+    //endregion
 
     void startVibrate() {
         BluetoothGattCharacteristic bchar = bluetoothGatt.getService(CustomBluetoothProfile.AlertNotification.service)
@@ -201,6 +304,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Nadpisane funckje z BLE SDK
     final BluetoothGattCallback bluetoothGattCallback = new BluetoothGattCallback() {
 
         @Override
@@ -227,6 +331,7 @@ public class MainActivity extends Activity {
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             super.onCharacteristicRead(gatt, characteristic, status);
             Log.v("test", "onCharacteristicRead");
+
             byte[] data = characteristic.getValue();
             txtByte.setText(Arrays.toString(data));
         }
@@ -239,10 +344,20 @@ public class MainActivity extends Activity {
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            txtState.setText("onCharacteristicChanged achieved");
             super.onCharacteristicChanged(gatt, characteristic);
             Log.v("test", "onCharacteristicChanged");
+            txtState.setText("onCharacteristicChanged achieved");
             byte[] data = characteristic.getValue();
+            txtState.setText("data achieved");
             txtByte.setText(Arrays.toString(data));
+            txtState.setText("data displayed");
+
+            //todo ashari
+          /*  switch (data[0]) {
+                case 0x1A:
+                   Log.d("sleep", data.toString() );
+            }*/
         }
 
         @Override
